@@ -12,6 +12,10 @@ class _Expr(ABC):
     @abstractmethod
     def render(self) -> str:
         raise NotImplementedError
+    def __str__(self) -> str:
+        return self.render()
+    def __repr__(self) -> str:
+        return str(self)
 
 class Atom(_Expr):
     def __init__(self, name: str):

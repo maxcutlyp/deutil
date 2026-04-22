@@ -2,10 +2,17 @@ from __future__ import annotations
 import re
 import typing as t
 import xml.etree.ElementTree as etree
+import logging
 
 from .expr import (
     Expr,
     ExpressionParser,
+)
+
+from .rules import (
+    find_rule,
+    ProofError,
+    SubproofRule,
 )
 
 def replace_symbols(text: str) -> str:
@@ -204,4 +211,55 @@ class Proof:
             table.append(row)
 
         return etree.tostring(table, encoding='unicode')
+
+    def get_line(self, num: int) -> tuple[Proof, ProofLine] | None:
+        if num < self.start or num > self.end:
+            if not self.parent:
+                return None
+            return self.parent.get_line(num)
+
+        for line in self.prems + self.lines:
+            if isinstance(line, Proof):
+                if line.start <= num <= line.end:
+                    return line.get_line(num)
+            elif line.num == num:
+                return self, line
+
+        return None
+
+    def check(self) -> None:
+        for line in self.prems + self.lines:
+            if isinstance(line, Proof):
+                line.check()
+            else:
+                rule = find_rule(line.justification)
+                if rule is None:
+                    raise ProofError(f'Line {line.num}: Unknown justification: {line.justification!r}')
+
+                prems = list[tuple[Proof, ProofLine]]()
+                for num in rule.prem_lines:
+                    prem_proof_and_line = self.get_line(num)
+                    if prem_proof_and_line is None:
+                        raise ProofError(f'Line {num} not found (referenced on line {line.num}: {line.justification})')
+                    prem_proof, prem_line = prem_proof_and_line
+                    if not isinstance(rule, SubproofRule) and prem_proof.level > self.level:
+                        raise ProofError(f'Line {num} is not accessible from line {line.num} ({line.justification})')
+                    prems.append(prem_proof_and_line)
+
+                logging.debug(f'Checking line {line.num}: {line.expr.render()} with premises {[l.expr.render() for _,l in prems]} against rule {rule.__class__.__name__}')
+
+                if isinstance(rule, SubproofRule):
+                    try:
+                        startproof, startline = prems[0]
+                        endproof, endline = prems[-1]
+                    except IndexError:
+                        raise ProofError(f'Rule {rule.__class__.__name__} requires at least one premise line (referenced on line {line.num}: {line.justification})')
+
+                    if startproof is not endproof or startline.num != startproof.start or endline.num != startproof.end:
+                        raise ProofError(f'Lines {startline.num}-{endline.num} do not form a valid subproof (referenced on line {line.num}: {line.justification})')
+
+                try:
+                    rule.check(line.expr, [l.expr for _,l in prems])
+                except ProofError as e:
+                    raise ProofError(f'Line {line.num}: {e}')
 

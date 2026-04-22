@@ -12,6 +12,9 @@ from weasyprint import HTML  # type:ignore[import-untyped]
 import logging
 
 from .proof import Proof
+from .rules import ProofError
+
+logging.basicConfig()
 
 WRITE_HTML = True
 
@@ -85,6 +88,10 @@ class ProofFormatter(Preprocessor):
                 except SyntaxError as e:
                     raise SyntaxError(f'Error parsing proof starting on line {real_i + 1}: {e}')
                 logging.debug(proof)
+                try:
+                    proof.check()
+                except ProofError as e:
+                    raise ProofError(f'Error checking proof starting on line {real_i + 1}: {e}')
                 html = proof.to_html()
                 lines[i] = html
                 for _ in range(len(proof_lines) - 1):
@@ -97,7 +104,7 @@ class ProofFormatter(Preprocessor):
         return lines
 
 class HeadingFixerPostProcessor(Postprocessor):
-    ''' If a heading is immediately before a <proof>, wrap them both in a div with `page-break-inside: avoid` to prevent them from being separated across pages. '''
+    ''' If a heading is immediately before a proof, wrap them both in a div with `page-break-inside: avoid` to prevent them from being separated across pages. '''
 
     def run(self, text: str) -> str:
         soup = BeautifulSoup(text, 'html.parser')
@@ -124,7 +131,7 @@ def convert(input_file: Path, output_file: Path) -> None:
 
     try:
         html_content = markdown.markdown(md_content, extensions=[ProofExtension()])
-    except SyntaxError as e:
+    except (SyntaxError, ProofError) as e:
         logging.error(e)
         sys.exit(1)
 
