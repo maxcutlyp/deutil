@@ -58,6 +58,10 @@ class SymbolicTerm(_Expr):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.name!r})"
 
+    @property
+    def is_arbitrary(self) -> bool:
+        return self.name.endswith('’')
+
 class Variable(SymbolicTerm):
     pass
 class ArbitraryTerm(SymbolicTerm):

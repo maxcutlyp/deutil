@@ -9,6 +9,8 @@ from .expr import (
     ExpressionParser,
     EndOfExpression,
     ArbitraryTerm,
+    SymbolicTerm,
+    extract_symbolic_terms,
 )
 
 from .rules import (
@@ -249,6 +251,17 @@ class Proof:
 
         return None
 
+    def invalid_arbitrary_terms(self, line: ProofLine) -> set[SymbolicTerm]:
+        in_scope_terms = set[SymbolicTerm]()
+        proof: Proof | None = self
+        while proof is not None:
+            if proof.arbitrary_term is not None:
+                in_scope_terms.add(proof.arbitrary_term)
+            proof = proof.parent
+
+        terms_in_line = { term for term in extract_symbolic_terms(line.expr) if term.is_arbitrary }
+        return terms_in_line - in_scope_terms
+
     def check(self) -> None:
         for line in self.prems + self.lines:
             if isinstance(line, Proof):
@@ -257,6 +270,10 @@ class Proof:
                 rule = find_rule(line.justification)
                 if rule is None:
                     raise ProofError(f'Line {line.num}: Unknown justification: {line.justification!r}')
+
+                if invalid_terms := self.invalid_arbitrary_terms(line):
+                    invalid_terms_str = ', '.join(term.name for term in invalid_terms)
+                    raise ProofError(f'Line {line.num}: The following arbitrary terms are not in scope: {invalid_terms_str} (referenced in line {line.num}: {line.justification})')
 
                 def get_line_or_die(num: int) -> tuple[Proof, ProofLine]:
                     line_info = self.get_line(num)
