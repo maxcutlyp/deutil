@@ -365,6 +365,30 @@ class IndirectDerivation(SubproofRule, Final):
         if assumption.operand != conc:
             raise ProofError(f'First premise of indirect derivation must be the negation of the conclusion (got {assumption.operand.render()} and {conc.render()})')
 
+class UniversalInstantiation(RegexRule, Final):
+    RULES = (
+        (
+            ('∀xF(x)',),
+            'F(a)',
+        ),
+    )
+    NAMES = ('ui', 'u.i.', 'universal instantiation')
+
+    def check(self, conc: Expr, prems: list[Expr]) -> None:
+        if len(prems) != 1:
+            raise ProofError(f'Universal instantiation must have exactly 1 premise (got {len(prems)})')
+        prem, = prems
+
+        if not isinstance(prem, UniversalQuantifier):
+            raise ProofError(f'Premise of universal instantiation must be a universal quantifier (got {prem.render()})')
+
+        for term in extract_symbolic_terms(conc):
+            replaced_conc = replace_symbolic_term(conc, term, prem.variable)
+            if replaced_conc == prem.body:
+                return
+
+        raise ProofError(f'No suitable term found to replace with {prem.variable} in conclusion for universal instantiation (got premise {prem.render()} and conclusion {conc.render()})')
+
 class ExistentialGeneralisation(RegexRule, Final):
     RULES = (
         (
@@ -389,3 +413,26 @@ class ExistentialGeneralisation(RegexRule, Final):
 
         raise ProofError(f'No suitable term found to replace with {conc.variable} in premise for existential generalisation (got premise {prem.render()} and conclusion {conc.render()})')
 
+class ExistentialInstantiation(RegexRule, Final):
+    RULES = (
+        (
+            ('∃xF(x)',),
+            'F(a)',
+        ),
+    )
+    NAMES = ('ei', 'e.i.', 'existential instantiation')
+
+    def check(self, conc: Expr, prems: list[Expr]) -> None:
+        if len(prems) != 1:
+            raise ProofError(f'Existential instantiation must have exactly 1 premise (got {len(prems)})')
+        prem, = prems
+
+        if not isinstance(prem, ExistentialQuantifier):
+            raise ProofError(f'Premise of existential instantiation must be an existential quantifier (got {prem.render()})')
+
+        for term in extract_symbolic_terms(conc):
+            replaced_conc = replace_symbolic_term(conc, term, prem.variable)
+            if replaced_conc == prem.body:
+                return
+
+        raise ProofError(f'No suitable term found to replace with {prem.variable} in conclusion for existential instantiation (got premise {prem.render()} and conclusion {conc.render()})')
