@@ -15,11 +15,13 @@ from .expr import (
     ExistentialQuantifier,
     UniversalQuantifier,
 )
+if t.TYPE_CHECKING:
+    from .proof import Proof
 
 class ProofError(Exception):
     pass
 
-class Rule(ABC):
+class InferenceRule(ABC):
     prem_lines: tuple[int, ...]
     def __init__(self, prem_lines: tuple[int, ...]):
         self.prem_lines = prem_lines
@@ -34,7 +36,32 @@ class Rule(ABC):
         ''' subclasses may assume that justification is stripped and lowercased '''
         raise NotImplementedError
 
-class SimpleRule(Rule):
+class SubproofRule(ABC):
+    NAMES: tuple[str, ...]
+
+    start: int
+    end: int
+    def __init__(self, start: int, end: int):
+        self.start = start
+        self.end = end
+
+    @abstractmethod
+    def check(self, conc: Expr, subproof: Proof) -> None:
+        raise NotImplementedError
+
+    @classmethod
+    def match(cls, justification: str) -> t.Self | None:
+        names_pattern = '|'.join(re.escape(name) for name in cls.NAMES)
+        pattern = re.compile(rf'^(?:{names_pattern})\.?:?\s*(\d+)-(\d+)$')
+        if m := pattern.match(justification):
+            try:
+                start, end = int(m.group(1)), int(m.group(2))
+            except ValueError:
+                return None
+            return cls(start, end)
+        return None
+
+class SimpleRule(InferenceRule):
     RULES: tuple[tuple[tuple[str, ...], str], ...]
 
     def __init__(self, prem_lines: tuple[int, ...] = ()):
@@ -71,9 +98,12 @@ class SimpleRule(Rule):
         if errs:
             raise ProofError(f'No matching rule found for {self.__class__.__name__} with conclusion {conc.render()} and premises {[p.render() for p in prems]} (errors: {errs})')
 
-class Final(Rule):
+type Rule = InferenceRule | SubproofRule
+class Final:
     def __init_subclass__(cls, **kwargs: t.Any) -> None:
         super().__init_subclass__(**kwargs)
+        if not issubclass(cls, (InferenceRule, SubproofRule)):
+            raise TypeError(f'Final can only be used with subclasses of Rule or SubproofRule (got {cls.__name__})')
         RULES.add(cls)
 RULES = set[type[Rule]]()
 
@@ -105,21 +135,6 @@ class RegexRule(SimpleRule):
             except ValueError:
                 raise ProofError(f'Invalid line number in justification: {justification!r}')
             return cls(prem_nums)
-        return None
-
-class SubproofRule(Rule):
-    NAMES: tuple[str, ...]
-
-    @classmethod
-    def match(cls, justification: str) -> t.Self | None:
-        names_pattern = '|'.join(re.escape(name) for name in cls.NAMES)
-        pattern = re.compile(rf'^(?:{names_pattern})\.?:?\s*(\d+)-(\d+)$')
-        if m := pattern.match(justification):
-            try:
-                start, end = int(m.group(1)), int(m.group(2))
-            except ValueError:
-                return None
-            return cls(tuple(range(start, end + 1)))
         return None
 
 class Premise(SimpleRule, Final):
@@ -333,25 +348,43 @@ class Theorem(SimpleRule, Final):
 class ConditionalDerivation(SubproofRule, Final):
     NAMES = ('cd', 'c.d.', 'conditional derivation')
 
-    def check(self, conc: Expr, prems: list[Expr]) -> None:
+    def check(self, conc: Expr, subproof: Proof) -> None:
         if not isinstance(conc, Imp):
             raise ProofError(f'Conclusion of conditional derivation must be an implication (got {conc.render()})')
 
-        assumption, *_, consequent = prems
+        assumption_line, *_ = subproof.prems
+        assumption = assumption_line.expr
         if assumption != conc.left:
-            raise ProofError(f'First premise of conditional derivation must match antecedent of conclusion (got {assumption.render()} and {conc.left.render()})')
+            raise ProofError(f'First premise of conditional derivation must match antecedent of conclusion (got {assumption} and {conc.left})')
 
+        *_, consequent_line = subproof.lines
+        if isinstance(consequent_line, Proof):
+            raise ProofError(f'Last line of conditional derivation cannot be a subproof (got {consequent_line})')
+
+        consequent = consequent_line.expr
         if consequent != conc.right:
-            raise ProofError(f'Last premise of conditional derivation must match consequent of conclusion (got {consequent.render()} and {conc.right.render()})')
+            raise ProofError(f'Last premise of conditional derivation must match consequent of conclusion (got {consequent} and {conc.right})')
 
 class IndirectDerivation(SubproofRule, Final):
     NAMES = ('id', 'i.d.', 'indirect derivation')
 
-    def check(self, conc: Expr, prems: list[Expr]) -> None:
+    def check(self, conc: Expr, subproof: Proof) -> None:
         try:
-            assumption, *_, contradiction_prem, contradiction_negation = prems
+            assumption_line, = subproof.prems
         except ValueError:
-            raise ProofError(f'Indirect derivation must have at least 3 statements including the assumption (got {[p.render() for p in prems]})')
+            raise ProofError(f'Indirect derivation must have exactly one assumption (got {subproof.prems})')
+        assumption = assumption_line.expr
+
+        try:
+            *_, contradiction_prem_line, contradiction_negation_line = subproof.prems
+        except ValueError:
+            raise ProofError(f'Indirect derivation must have at least 2 statements (got {subproof.lines})')
+        if isinstance(contradiction_prem_line, Proof):
+            raise ProofError(f'Second-last line of indirect derivation cannot be a subproof (got {contradiction_prem_line})')
+        if isinstance(contradiction_negation_line, Proof):
+            raise ProofError(f'Last line of indirect derivation cannot be a subproof (got {contradiction_negation_line})')
+        contradiction_prem = contradiction_prem_line.expr
+        contradiction_negation = contradiction_negation_line.expr
 
         if not isinstance(contradiction_negation, Not):
             raise ProofError(f'Last premise of indirect derivation must be a negation (got {contradiction_negation.render()})')
@@ -436,3 +469,24 @@ class ExistentialInstantiation(RegexRule, Final):
                 return
 
         raise ProofError(f'No suitable term found to replace with {prem.variable} in conclusion for existential instantiation (got premise {prem.render()} and conclusion {conc.render()})')
+
+class UniversalDerivation(SubproofRule, Final):
+    NAMES = ('ud', 'u.d.', 'universal derivation')
+
+    def check(self, conc: Expr, subproof: Proof) -> None:
+        if not isinstance(conc, UniversalQuantifier):
+            raise ProofError(f'Conclusion of universal derivation must be a universal quantifier (got {conc.render()})')
+
+        if subproof.arbitrary_term is None:
+            raise ProofError(f'Subproof for universal derivation must have an arbitrary term (got {subproof.arbitrary_term})')
+
+        *_, last_line = subproof.lines
+        if not hasattr(last_line, 'expr'):
+            # can't use isinstance because of circular imports
+            raise ProofError(f'Last line of subproof for universal derivation cannot be a subproof (got {last_line})')
+        last_expr = last_line.expr
+
+        replaced_last = replace_symbolic_term(last_expr, subproof.arbitrary_term, conc.variable)
+        if replaced_last != conc.body:
+            raise ProofError(f'Last line of subproof for universal derivation must match body of conclusion after replacing arbitrary term with variable (got {last_expr} -> {replaced_last}, expected {conc.body})')
+

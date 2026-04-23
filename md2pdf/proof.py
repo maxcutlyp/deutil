@@ -7,21 +7,16 @@ import logging
 from .expr import (
     Expr,
     ExpressionParser,
+    EndOfExpression,
+    ArbitraryTerm,
 )
 
 from .rules import (
     find_rule,
     ProofError,
+    InferenceRule,
     SubproofRule,
 )
-
-def replace_symbols(text: str) -> str:
-    text = text.replace('<->', '↔')
-    text = text.replace('->', '→')
-    text = text.replace('^', '∧')
-    text = text.replace('v', '∨')
-    text = text.replace('~', '¬')
-    return text
 
 class ProofLine:
     num: int
@@ -41,6 +36,7 @@ class Proof:
     end: int
     level: int
     parent: Proof | None
+    arbitrary_term: ArbitraryTerm | None
 
     def __init__(
         self,
@@ -49,12 +45,14 @@ class Proof:
         start: int,
         end: int,
         level: int,
+        arbitrary_term: ArbitraryTerm | None,
     ):
         self.prems = prems
         self.lines = lines
         self.start = start
         self.end = end
         self.level = level
+        self.arbitrary_term = arbitrary_term
         self.parent = None
 
     def __str__(self) -> str:
@@ -77,6 +75,8 @@ class Proof:
         prems = list[ProofLine]()
         lines = list[ProofLine | Proof]()
         curr: list[ProofLine] | list[ProofLine | Proof] = prems
+
+        arbitrary_term: ArbitraryTerm | None = None
 
         i = 0
         while i < len(rawlines):
@@ -110,8 +110,22 @@ class Proof:
                     expr = parser.parse()
                 except SyntaxError as e:
                     raise SyntaxError(f'Error parsing expression on line {num}: {e}')
+                except EndOfExpression:
+                    raise SyntaxError(f'Unexpected end of expression on line {num}')
 
                 curr.append(ProofLine(int(num), expr, justification))
+                continue
+
+            if m := re.match(r"^\[([a-z]['’])\]", trimmed):
+                # defining an arbitrary term
+                if level == 1:
+                    raise SyntaxError(f'Arbitrary terms can only be defined in subproofs (line {i})')
+                if curr is lines:
+                    raise SyntaxError(f'Arbitrary term definition must be the first line of a subproof (line {i})')
+                if arbitrary_term is not None:
+                    raise SyntaxError(f'Multiple arbitrary terms defined in the same proof (line {i})')
+                arbitrary_term = ArbitraryTerm(m.group(1).replace("'", '’'))  # replace straight quote with prime symbol
+
                 continue
 
             raise SyntaxError(f'Invalid proof line on line {i+1}: {line}')
@@ -140,6 +154,7 @@ class Proof:
                 else 0
             ),
             level=level,
+            arbitrary_term=arbitrary_term,
         )
 
         for l in lines:
@@ -182,13 +197,20 @@ class Proof:
             just_cell = etree.SubElement(row, 'td')
             if line is not None:
                 content_cell.text = f'{line.num}. {line.expr.render()}'
-                content_cell.text = replace_symbols(content_cell.text)
-
                 just_cell.text = line.justification
 
             return row
 
-        for i,prem in enumerate(self.prems or [None]):
+        if self.arbitrary_term:
+            atd_row = _row(None)
+            atd_cell = atd_row.find('td[@colspan]')
+            assert atd_cell is not None
+            atd_box = etree.SubElement(atd_cell, 'span', {'class': 'arbitrary-term'})
+            atd_box.text = self.arbitrary_term.name
+            atd_row.set('class', 'end-of-premises')
+            yield atd_row
+
+        for i,prem in enumerate(self.prems or ([None] if self.arbitrary_term is None else [])):
             row = _row(prem)
 
             if not self.prems or i == len(self.prems) - 1:
@@ -236,30 +258,40 @@ class Proof:
                 if rule is None:
                     raise ProofError(f'Line {line.num}: Unknown justification: {line.justification!r}')
 
-                prems = list[tuple[Proof, ProofLine]]()
-                for num in rule.prem_lines:
-                    prem_proof_and_line = self.get_line(num)
-                    if prem_proof_and_line is None:
+                def get_line_or_die(num: int) -> tuple[Proof, ProofLine]:
+                    line_info = self.get_line(num)
+                    if line_info is None:
                         raise ProofError(f'Line {num} not found (referenced on line {line.num}: {line.justification})')
-                    prem_proof, prem_line = prem_proof_and_line
-                    if not isinstance(rule, SubproofRule) and prem_proof.level > self.level:
-                        raise ProofError(f'Line {num} is not accessible from line {line.num} ({line.justification})')
-                    prems.append(prem_proof_and_line)
+                    return line_info
 
-                logging.debug(f'Checking line {line.num}: {line.expr.render()} with premises {[l.expr.render() for _,l in prems]} against rule {rule.__class__.__name__}')
+                if isinstance(rule, InferenceRule):
+                    prems = list[Expr]()
+                    for num in rule.prem_lines:
+                        prem_proof, prem_line = get_line_or_die(num)
+                        if prem_proof.level > self.level:
+                            raise ProofError(f'Line {num} is not accessible from line {line.num} ({line.justification})')
+                        prems.append(prem_line.expr)
+                    logging.debug(f'Checking line {line.num}: {line.expr.render()} with premises {prems} against rule {rule.__class__.__name__}')
 
-                if isinstance(rule, SubproofRule):
                     try:
-                        startproof, startline = prems[0]
-                        endproof, endline = prems[-1]
-                    except IndexError:
-                        raise ProofError(f'Rule {rule.__class__.__name__} requires at least one premise line (referenced on line {line.num}: {line.justification})')
+                        rule.check(line.expr, prems)
+                    except ProofError as e:
+                        raise ProofError(f'Line {line.num}: {e}')
 
-                    if startproof is not endproof or startline.num != startproof.start or endline.num != startproof.end:
-                        raise ProofError(f'Lines {startline.num}-{endline.num} do not form a valid subproof (referenced on line {line.num}: {line.justification})')
+                elif isinstance(rule, SubproofRule):
+                    start_proof, start_line = get_line_or_die(rule.start)
+                    end_proof, end_line = get_line_or_die(rule.end)
+                    if start_proof is not end_proof:
+                        raise ProofError(f'Lines {rule.start} and {rule.end} are not in the same subproof (referenced on line {line.num}: {line.justification})')
+                    if rule.start != start_line.num:
+                        raise ProofError(f'Line {rule.start} is not the start of a subproof (referenced on line {line.num}: {line.justification})')
+                    if rule.end != end_line.num:
+                        raise ProofError(f'Line {rule.end} is not the end of a subproof (referenced on line {line.num}: {line.justification})')
 
-                try:
-                    rule.check(line.expr, [l.expr for _,l in prems])
-                except ProofError as e:
-                    raise ProofError(f'Line {line.num}: {e}')
+                    try:
+                        rule.check(line.expr, start_proof)
+                    except ProofError as e:
+                        raise ProofError(f'Line {line.num}: {e}')
 
+                else:
+                    raise NotImplementedError(f'Unknown rule type: {type(rule)}')

@@ -19,7 +19,7 @@ class _Expr(ABC):
     def __str__(self) -> str:
         return self.render()
     def __repr__(self) -> str:
-        return str(self)
+        return f"{self.__class__.__name__}({', '.join(f'{arg}={getattr(self, arg)!r}' for arg in self.__match_args__)})"
 
     def __init_subclass__(cls) -> None:
         sig = inspect.signature(cls.__init__)
@@ -60,10 +60,8 @@ class SymbolicTerm(_Expr):
 
 class Variable(SymbolicTerm):
     pass
-class DefiniteName(SymbolicTerm):
+class ArbitraryTerm(SymbolicTerm):
     pass
-# TODO: Indefinite names, arbitrary terms
-
 class Argument(SymbolicTerm):
     pass
 
@@ -338,6 +336,10 @@ class ExpressionTokenizer:
                 return AtomOrPredicateOrMetaFunctionToken(c), 1 + (pos - self.pos)
 
             if c.islower():
+                arbitrary_term = self.expr[pos : pos + 2]
+                if len(arbitrary_term) == 2 and arbitrary_term[-1:] in ("'’"):
+                    # force arbitrary terms to be rendered with a prime symbol, even if the input uses a straight apostrophe
+                    return SymbolicTermToken(arbitrary_term[:-1] + '’'), 2 + (pos - self.pos)
                 return SymbolicTermToken(c), 1 + (pos - self.pos)
 
             token_width += 1
@@ -528,67 +530,3 @@ def unify(expr1: Expr, expr2: Expr, bindings: dict[Atom, Expr] | None = None) ->
 
     else:
         raise ValueError(f'Unknown expression type: {type(expr1)}')
-
-# def unify(expr1: Expr, expr2: Expr, bindings: dict[Atom, Expr] | None = None) -> dict[Atom, Expr] | None:
-#     def debug(*args: t.Any) -> None:
-#         if DO_UNIFY_DEBUG:
-#             print(*args)
-# 
-#     if bindings is None:
-#         bindings = {}
-# 
-#     debug(f'Unifying {expr1.render()} and {expr2.render()} with bindings {bindings}')
-#     if isinstance(expr1, Atom):
-#         if expr1 in bindings:
-#             if bindings[expr1] == expr2:
-#                 return bindings
-#             return None
-#         else:
-#             bindings[expr1] = expr2
-#             return bindings
-# 
-#     elif isinstance(expr1, MetaFunction):
-#         if isinstance(expr2, Atom):
-#             return None
-#         if isinstance(expr2, Predicate):
-#             for expr2_argument in expr2.arguments:
-#                 bindings[expr1.argument] = expr2_argument
-#                 if (new_bindings := unify(expr1, expr2_argument, bindings)) is not None:
-#                     return new_bindings
-#         if isinstance(expr2, Quantifier):
-#             ...
-#         if isinstance(expr2, UnaryOperator):
-#             new_operand = MetaFunction(new_metafunc_name(expr1, expr2), new_variable(expr1, expr2))
-#             return unify(new_operand, expr2.operand, bindings)
-#         if isinstance(expr2, BinaryOperator):
-#             new_left = MetaFunction(new_metafunc_name(expr1, expr2), new_variable(expr1, expr2))
-#             new_right = MetaFunction(new_metafunc_name(expr1, expr2, new_left), new_variable(expr1, expr2, new_left))
-#             bindings_left = unify(new_left, expr2.left, bindings)
-#             if bindings_left is None:
-#                 return None
-#             bindings_right = unify(new_right, expr2.right, bindings_left)
-#             if bindings_right is None:
-#                 return None
-#             return bindings_left | bindings_right
-#         if isinstance(expr2, MetaFunction):
-#             raise NotImplementedError("Unification of metafunctions not implemented")
-# 
-#     elif type(expr1) != type(expr2):
-#         return None
-# 
-#     elif isinstance(expr1, UnaryOperator):
-#         if not isinstance(expr2, UnaryOperator):
-#             return None
-#         return unify(expr1.operand, expr2.operand, bindings)
-# 
-#     elif isinstance(expr1, BinaryOperator):
-#         if not isinstance(expr2, BinaryOperator):
-#             return None
-#         bindings_left = unify(expr1.left, expr2.left, bindings)
-#         if bindings_left is None:
-#             return None
-#         return unify(expr1.right, expr2.right, bindings_left)
-# 
-#     else:
-#         raise ValueError(f'Unknown expression type: {type(expr1)}')
-# 

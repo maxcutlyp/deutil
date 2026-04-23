@@ -39,6 +39,13 @@ table.proof td:not(:nth-last-child(2)) {
   width: 0;
   white-space: nowrap;
 }
+
+.arbitrary-term {
+    border: 1px solid currentColor;
+    padding: 0.25em 0.5em;
+    margin: 0.25em;
+    display: inline-block;
+}
 '''
 
 class StylePostprocessor(Postprocessor):
