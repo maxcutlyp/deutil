@@ -7,46 +7,17 @@ from .expr import (
     Expr,
     ExpressionParser,
     Atom,
-    UnaryOperator,
-    BinaryOperator,
     Imp,
     Not,
+    unify,
+    extract_symbolic_terms,
+    replace_symbolic_term,
+    ExistentialQuantifier,
+    UniversalQuantifier,
 )
 
 class ProofError(Exception):
     pass
-
-def unify(expr1: Expr, expr2: Expr, bindings: dict[Atom, Expr] | None = None) -> dict[Atom, Expr] | None:
-    if bindings is None:
-        bindings = {}
-
-    if isinstance(expr1, Atom):
-        if expr1 in bindings:
-            if bindings[expr1] == expr2:
-                return bindings
-            return None
-        else:
-            bindings[expr1] = expr2
-            return bindings
-
-    elif type(expr1) != type(expr2):
-        return None
-
-    elif isinstance(expr1, UnaryOperator):
-        if not isinstance(expr2, UnaryOperator):
-            return None
-        return unify(expr1.operand, expr2.operand, bindings)
-
-    elif isinstance(expr1, BinaryOperator):
-        if not isinstance(expr2, BinaryOperator):
-            return None
-        bindings_left = unify(expr1.left, expr2.left, bindings)
-        if bindings_left is None:
-            return None
-        return unify(expr1.right, expr2.right, bindings_left)
-
-    else:
-        raise ValueError(f'Unknown expression type: {type(expr1)}')
 
 class Rule(ABC):
     prem_lines: tuple[int, ...]
@@ -393,4 +364,28 @@ class IndirectDerivation(SubproofRule, Final):
 
         if assumption.operand != conc:
             raise ProofError(f'First premise of indirect derivation must be the negation of the conclusion (got {assumption.operand.render()} and {conc.render()})')
+
+class ExistentialGeneralisation(RegexRule, Final):
+    RULES = (
+        (
+            ('F(a)',),
+            '∃xF(x)',
+        ),
+    )
+    NAMES = ('eg', 'e.g.', 'existential generalisation', 'existential generalization')
+
+    def check(self, conc: Expr, prems: list[Expr]) -> None:
+        if len(prems) != 1:
+            raise ProofError(f'Existential generalisation must have exactly 1 premise (got {len(prems)})')
+        prem, = prems
+
+        if not isinstance(conc, ExistentialQuantifier):
+            raise ProofError(f'Conclusion of existential generalisation must be an existential quantifier (got {conc.render()})')
+
+        for term in extract_symbolic_terms(prem):
+            replaced_prem = replace_symbolic_term(prem, term, conc.variable)
+            if replaced_prem == conc.body:
+                return
+
+        raise ProofError(f'No suitable term found to replace with {conc.variable} in premise for existential generalisation (got premise {prem.render()} and conclusion {conc.render()})')
 
