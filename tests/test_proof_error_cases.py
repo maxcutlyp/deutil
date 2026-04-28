@@ -390,6 +390,7 @@ def test_proof_errors(markdown: str, pattern: str) -> None:
             | | [x']
             | |-
             | | 2. A  repeat: 1
+            | 3. (A -> A)  C.D. 1-2
             """,
             r"must be the first line of a subproof",
         ),

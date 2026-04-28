@@ -126,7 +126,7 @@ class Proof:
                 # defining an arbitrary term
                 if level == 1:
                     raise SyntaxError(f'Arbitrary terms can only be defined in subproofs (line {i})')
-                if curr is lines:
+                if curr is lines or (curr is prems and prems):
                     raise SyntaxError(f'Arbitrary term definition must be the first line of a subproof (line {i})')
                 if arbitrary_term is not None:
                     raise SyntaxError(f'Multiple arbitrary terms defined in the same proof (line {i})')
