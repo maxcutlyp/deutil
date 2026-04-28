@@ -15,6 +15,7 @@ import argparse
 from .proof import Proof
 from .rules import ProofError
 from .rules import print_rules_help
+from .truthtables import truth_tables_repl
 
 parser = argparse.ArgumentParser(description='Convert a Markdown file with DeLancy-style proofs to PDF.')
 parser.add_argument('input', nargs='?', help='The input Markdown file.')
@@ -23,6 +24,7 @@ parser.add_argument('--help-rules', action='store_true', help='Show the rules th
 parser.add_argument('--check', action=argparse.BooleanOptionalAction, default=True, help='Whether to check the proofs for correctness. Default is True.')
 parser.add_argument('--pdf', action=argparse.BooleanOptionalAction, default=True, help='Whether to write the output PDF file. Default is True.')
 parser.add_argument('--html', action=argparse.BooleanOptionalAction, default=False, help='Whether to write the intermediate HTML file. Default is False.')
+parser.add_argument('--tt', action='store_true', help='Enter the truth tables REPL instead of converting a file. Note: truth tables only support PL, not FOL.')
 parser.add_argument('--debug', action='store_true', help='Enable debug logging.')
 
 logging.basicConfig(level=logging.DEBUG if parser.parse_args().debug else logging.INFO)
@@ -180,6 +182,9 @@ def main() -> int:
     if args.help_rules:
         print_rules_help()
         return 0
+
+    if args.tt:
+        return truth_tables_repl()
 
     if not args.input:
         print('Error: No input file provided.\n')

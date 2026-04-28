@@ -7,6 +7,8 @@ import inspect
 import logging
 import typing as t
 
+FOL_IN_TRUTHTABLE_ERROR = SyntaxError("Cannot use FOL expressions in truth tables")
+
 class _Expr(ABC):
     __match_args__: tuple[str, ...]
 
@@ -46,7 +48,7 @@ class SymbolicTerm(_Expr):
     def __init__(self, name: str):
         self.name = name
     def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        raise NotImplementedError("Evaluation of symbolic terms is not implemented yet")
+        raise FOL_IN_TRUTHTABLE_ERROR
     def __hash__(self) -> int:
         return hash(self.name)
     def __eq__(self, other: object) -> bool:
@@ -74,7 +76,7 @@ class Predicate(_Expr):
         self.name = name
         self.arguments = arguments
     def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        raise NotImplementedError("Evaluation of predicates is not implemented yet")
+        raise FOL_IN_TRUTHTABLE_ERROR
     def __hash__(self) -> int:
         return hash((self.name, tuple(self.arguments)))
     def __eq__(self, other: object) -> bool:
@@ -99,13 +101,13 @@ class Quantifier(_Expr):
 
 class UniversalQuantifier(Quantifier):
     def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        raise NotImplementedError("Evaluation of quantifiers not implemented yet")
+        raise FOL_IN_TRUTHTABLE_ERROR
     def render(self) -> str:
         return f"{StaticToken.UNIVERSAL.value}{self.variable.render()}{self.body.render()}"
 
 class ExistentialQuantifier(Quantifier):
     def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        raise NotImplementedError("Evaluation of quantifiers not implemented yet")
+        raise FOL_IN_TRUTHTABLE_ERROR
     def render(self) -> str:
         return f"{StaticToken.EXISTENTIAL.value}{self.variable.render()}{self.body.render()}"
 
@@ -158,7 +160,7 @@ class MetaFunction(_Expr):
         self.name = name
         self.argument = argument
     def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        raise NotImplementedError("Evaluation of metafunctions not implemented yet")
+        raise FOL_IN_TRUTHTABLE_ERROR
     def __hash__(self) -> int:
         return hash((self.name, self.argument))
     def __eq__(self, other: object) -> bool:
