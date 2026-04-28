@@ -36,6 +36,11 @@ class InferenceRule(ABC):
         ''' subclasses may assume that justification is stripped and lowercased '''
         raise NotImplementedError
 
+    @classmethod
+    @abstractmethod
+    def help(cls) -> str:
+        raise NotImplementedError
+
 class SubproofRule(ABC):
     NAMES: tuple[str, ...]
 
@@ -51,7 +56,7 @@ class SubproofRule(ABC):
 
     @classmethod
     def match(cls, justification: str) -> t.Self | None:
-        names_pattern = '|'.join(re.escape(name) for name in cls.NAMES)
+        names_pattern = '|'.join(re.escape(name.lower()) for name in cls.NAMES)
         pattern = re.compile(rf'^(?:{names_pattern})\.?:?\s*(\d+)-(\d+)$')
         if m := pattern.match(justification):
             try:
@@ -60,6 +65,11 @@ class SubproofRule(ABC):
                 return None
             return cls(start, end)
         return None
+
+    @classmethod
+    @abstractmethod
+    def help(cls) -> str:
+        raise NotImplementedError
 
 class SimpleRule(InferenceRule):
     RULES: tuple[tuple[tuple[str, ...], str], ...]
@@ -104,8 +114,8 @@ class Final:
         super().__init_subclass__(**kwargs)
         if not issubclass(cls, (InferenceRule, SubproofRule)):
             raise TypeError(f'Final can only be used with subclasses of Rule or SubproofRule (got {cls.__name__})')
-        RULES.add(cls)
-RULES = set[type[Rule]]()
+        RULES.append(cls)
+RULES = list[type[Rule]]()
 
 def find_rule(justification: str) -> Rule | None:
     justification = justification.strip().lower()
@@ -120,12 +130,29 @@ def find_rule(justification: str) -> Rule | None:
 
     return matched[0]
 
+def print_rules_help() -> None:
+    print()
+    print('## Inference rules:')
+    print()
+    for rule in RULES:
+        if issubclass(rule, InferenceRule):
+            print(rule.help())
+            print()
+
+    print()
+    print('## Subproof rules:')
+    print()
+    for rule in RULES:
+        if issubclass(rule, SubproofRule):
+            print(rule.help())
+            print()
+
 class RegexRule(SimpleRule):
     NAMES: tuple[str, ...]
 
     @classmethod
     def match(cls, justification: str) -> t.Self | None:
-        names_pattern = '|'.join(re.escape(name) for name in cls.NAMES)
+        names_pattern = '|'.join(re.escape(name.lower()) for name in cls.NAMES)
         lines_pattern = '|'.join(r',\s*'.join(r'\d+' for _ in prems) for prems,_conc in cls.RULES)
         pattern = re.compile(rf'^(?:{names_pattern})\.?:?\s*({lines_pattern})$')
         if m := pattern.match(justification):
@@ -137,6 +164,23 @@ class RegexRule(SimpleRule):
             return cls(prem_nums)
         return None
 
+    @classmethod
+    def help(cls) -> str:
+        rule_strs = []
+        for rule_prems, rule_conc in cls.RULES:
+            rule_strs.append(
+                f"{', '.join([
+                     str(ExpressionParser(rule_prem).parse())
+                     for rule_prem in rule_prems
+                ])} ⊢ {ExpressionParser(rule_conc).parse()}")
+        return '\n'.join([
+            cls.__name__ + ':',
+            '  Rules:',
+            *('    ' + rule_str for rule_str in rule_strs),
+            '  Justifications:',
+            *('    ' + name for name in cls.NAMES),
+        ])
+
 class Premise(SimpleRule, Final):
     RULES = ()
 
@@ -146,6 +190,17 @@ class Premise(SimpleRule, Final):
             return cls(())
         return None
 
+    @classmethod
+    def help(cls) -> str:
+        return '\n'.join([
+            cls.__name__ + ':',
+            '  Rules:',
+            '    (none)',
+            '  Justifications:',
+            '    premise',
+            '    prem.',
+        ])
+
 class Assumption(SimpleRule, ABC):
     RULES = ()
 
@@ -154,10 +209,13 @@ class Assumption(SimpleRule, ABC):
 
     @classmethod
     def match(cls, justification: str) -> t.Self | None:
+        for_short = cls.for_short.lower()
+        for_long = cls.for_long.lower()
+
         try:
             first_word, rest = justification.split(maxsplit=1)
         except ValueError:
-            if justification in (f'a{cls.for_short.replace('.', '')}', f'a.{cls.for_short}'):
+            if justification in (f'a{for_short.replace('.', '')}', f'a.{for_short}'):
                 return cls(())
             return None
 
@@ -165,16 +223,29 @@ class Assumption(SimpleRule, ABC):
             return None
 
         if first_word == 'assumption' or ('assumption'.startswith(first_word) and first_word.endswith('.')):
-            if rest.replace('for ', '') in (cls.for_short.replace('.', ''), cls.for_short, cls.for_long):
+            if rest.replace('for ', '') in (for_short.replace('.', ''), for_short, for_long):
                 return cls(())
         return None
 
+    @classmethod
+    def help(cls) -> str:
+        return '\n'.join([
+            cls.__name__ + ':',
+            '  Rules:',
+            '    (none)',
+            '  Justifications:',
+            '    assumption for ' + cls.for_long,
+            '    assumption for ' + cls.for_short,
+            '    A. for ' + cls.for_short,
+            '    A.' + cls.for_short,
+        ])
+
 class AssumptionForCD(Assumption, Final):
-    for_short = 'c.d.'
+    for_short = 'C.D.'
     for_long = 'conditional derivation'
 
 class AssumptionForID(Assumption, Final):
-    for_short = 'i.d.'
+    for_short = 'I.D.'
     for_long = 'indirect derivation'
 
 class ModusPonens(RegexRule, Final):
@@ -184,7 +255,7 @@ class ModusPonens(RegexRule, Final):
             'B',
         ),
     )
-    NAMES = ('mp', 'm.p.', 'modus ponens')
+    NAMES = ('MP', 'M.P.', 'modus ponens')
 
 class ModusTollens(RegexRule, Final):
     RULES = (
@@ -193,7 +264,7 @@ class ModusTollens(RegexRule, Final):
             '~A',
         ),
     )
-    NAMES = ('mt', 'm.t.', 'modus tollens')
+    NAMES = ('MT', 'M.T.', 'modus tollens')
 
 class DoubleNegation(RegexRule, Final):
     RULES = (
@@ -206,7 +277,7 @@ class DoubleNegation(RegexRule, Final):
             '~~A',
         ),
     )
-    NAMES = ('dn', 'd.n.', 'double negation')
+    NAMES = ('DN', 'D.N.', 'double negation')
 
 class Repeat(RegexRule, Final):
     RULES = (
@@ -241,7 +312,7 @@ class DisjunctiveSyllogism(RegexRule, Final):
             'A',
         ),
     )
-    NAMES = ('ds', 'd.s.', 'disjunctive syllogism')
+    NAMES = ('DS', 'D.S.', 'disjunctive syllogism')
 
 class Adjunction(RegexRule, Final):
     RULES = (
@@ -336,7 +407,7 @@ class Theorem(SimpleRule, Final):
     def match(cls, justification: str) -> t.Self | None:
         first_word = justification.split(maxsplit=1)[0].strip(':.,')
         if first_word == 'theorem' or ('theorem'.startswith(first_word) and first_word.endswith('.')):
-            if m := re.search(r'T(\d+)$', justification):
+            if m := re.search(r't(\d+)$', justification):
                 try:
                     theorem_number = int(m.group(1))
                 except ValueError:
@@ -345,10 +416,26 @@ class Theorem(SimpleRule, Final):
             return cls((), theorem_number=None)
         return None
 
+    @classmethod
+    def help(cls) -> str:
+        theorem_strs = []
+        for i, theorem in enumerate(THEOREMS, start=1):
+            theorem_strs.append(f'T{i}. {ExpressionParser(theorem).parse()}')
+        return '\n'.join([
+            cls.__name__ + ':',
+            '  Allowed theorems:',
+            *('    ' + theorem_str for theorem_str in theorem_strs),
+            '  Justifications:',
+            '    theorem',
+            '    theorem: T# (e.g. theorem T1)',
+        ])
+
 class ConditionalDerivation(SubproofRule, Final):
-    NAMES = ('cd', 'c.d.', 'conditional derivation')
+    NAMES = ('CD', 'C.D.', 'conditional derivation')
 
     def check(self, conc: Expr, subproof: Proof) -> None:
+        from .proof import Proof
+
         if not isinstance(conc, Imp):
             raise ProofError(f'Conclusion of conditional derivation must be an implication (got {conc.render()})')
 
@@ -365,10 +452,20 @@ class ConditionalDerivation(SubproofRule, Final):
         if consequent != conc.right:
             raise ProofError(f'Last premise of conditional derivation must match consequent of conclusion (got {consequent} and {conc.right})')
 
+    @classmethod
+    def help(cls) -> str:
+        return '\n'.join([
+            cls.__name__ + ':',
+            '  Justifications:',
+            '    conditional derivation',
+            '    C.D.',
+        ])
+
 class IndirectDerivation(SubproofRule, Final):
     NAMES = ('id', 'i.d.', 'indirect derivation')
 
     def check(self, conc: Expr, subproof: Proof) -> None:
+        from .proof import Proof
         try:
             assumption_line, = subproof.prems
         except ValueError:
@@ -376,7 +473,7 @@ class IndirectDerivation(SubproofRule, Final):
         assumption = assumption_line.expr
 
         try:
-            *_, contradiction_prem_line, contradiction_negation_line = subproof.prems
+            *_, contradiction_prem_line, contradiction_negation_line = subproof.lines
         except ValueError:
             raise ProofError(f'Indirect derivation must have at least 2 statements (got {subproof.lines})')
         if isinstance(contradiction_prem_line, Proof):
@@ -397,6 +494,15 @@ class IndirectDerivation(SubproofRule, Final):
 
         if assumption.operand != conc:
             raise ProofError(f'First premise of indirect derivation must be the negation of the conclusion (got {assumption.operand.render()} and {conc.render()})')
+
+    @classmethod
+    def help(cls) -> str:
+        return '\n'.join([
+            cls.__name__ + ':',
+            '  Justifications:',
+            '    indirect derivation',
+            '    I.D.',
+        ])
 
 class UniversalInstantiation(RegexRule, Final):
     RULES = (
@@ -489,4 +595,13 @@ class UniversalDerivation(SubproofRule, Final):
         replaced_last = replace_symbolic_term(last_expr, subproof.arbitrary_term, conc.variable)
         if replaced_last != conc.body:
             raise ProofError(f'Last line of subproof for universal derivation must match body of conclusion after replacing arbitrary term with variable (got {last_expr} -> {replaced_last}, expected {conc.body})')
+
+    @classmethod
+    def help(cls) -> str:
+        return '\n'.join([
+            cls.__name__ + ':',
+            '  Justifications:',
+            '    universal derivation',
+            '    U.D.',
+        ])
 

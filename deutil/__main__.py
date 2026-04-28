@@ -14,10 +14,12 @@ import argparse
 
 from .proof import Proof
 from .rules import ProofError
+from .rules import print_rules_help
 
 parser = argparse.ArgumentParser(description='Convert a Markdown file with DeLancy-style proofs to PDF.')
-parser.add_argument('input', help='The input Markdown file.')
+parser.add_argument('input', nargs='?', help='The input Markdown file.')
 parser.add_argument('output', nargs='?', help='The output PDF file. If not provided, the output file will have the same name as the input file but with a .pdf extension.')
+parser.add_argument('--help-rules', action='store_true', help='Show the rules that are supported in the proofs and exit.')
 parser.add_argument('--check', action=argparse.BooleanOptionalAction, default=True, help='Whether to check the proofs for correctness. Default is True.')
 parser.add_argument('--pdf', action=argparse.BooleanOptionalAction, default=True, help='Whether to write the output PDF file. Default is True.')
 parser.add_argument('--html', action=argparse.BooleanOptionalAction, default=False, help='Whether to write the intermediate HTML file. Default is False.')
@@ -145,7 +147,7 @@ class ProofExtension(markdown.Extension):
         self.check = check
 
     def extendMarkdown(self, md: markdown.Markdown) -> None:
-        md.preprocessors.register(ProofFormatter(md, check=check), 'proof_formatter', 20)
+        md.preprocessors.register(ProofFormatter(md, check=self.check), 'proof_formatter', 20)
         md.postprocessors.register(StylePostprocessor(md), 'style_postprocessor', 25)
         md.postprocessors.register(HeadingFixerPostProcessor(md), 'heading_fixer_postprocessor', 15)
 
@@ -173,6 +175,16 @@ def convert(
 
 def main() -> int:
     args = parser.parse_args()
+
+    if args.help_rules:
+        print_rules_help()
+        return 0
+
+    if not args.input:
+        print('Error: No input file provided.\n')
+        parser.print_help()
+        return 1
+
     input_file = Path(args.input)
     output_file = Path(args.output) if args.output else input_file.with_suffix('.pdf')
 
