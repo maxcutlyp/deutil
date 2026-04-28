@@ -270,6 +270,9 @@ class Proof:
         return terms_in_line - in_scope_terms
 
     def check(self) -> None:
+        if self.arbitrary_term is not None and self.prems:
+            raise ProofError(f'Arbitrary term {self.arbitrary_term} cannot be defined in a proof with premises (line {self.start})')
+
         for line in self.prems + self.lines:
             if isinstance(line, Proof):
                 line.check()

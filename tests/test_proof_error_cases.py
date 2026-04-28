@@ -276,11 +276,10 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
         (
             """
             |-
-            | | [x']
-            | | 1. Fx'  premise
+            | | 1. Fx  premise
             | |-
-            | | 2. Gx'  premise
-            | 3. A  U.D. 1-2
+            | | 2. Gx  premise
+            | 3. (Fx -> Gx)  U.D. 1-2
             """,
             r"Conclusion of universal derivation must be a universal quantifier",
         ),
@@ -298,10 +297,9 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
             """
             |-
             | | [x']
-            | | 1. Fx'  premise
             | |-
-            | | 2. Gx'  premise
-            | 3. \\VxHx  U.D. 1-2
+            | | 1. Gx'  premise
+            | 2. \\VxHx  U.D. 1-1
             """,
             r"must match body of conclusion",
         ),

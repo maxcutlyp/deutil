@@ -155,12 +155,15 @@ from deutil.proof import Proof
         """,
         # Universal Derivation
         """
+        | 1. \\Vx(Fx -> Gx)  premise
+        | 2. \\VyFy  premise
         |-
         | | [x']
-        | | 1. Fx'  premise
         | |-
-        | | 2. Gx'  premise
-        | 3. \\VxGx  U.D. 1-2
+        | | 3. (Fx' -> Gx')  U.I. 1
+        | | 4. Fx'           U.I. 2
+        | | 5. Gx'           MP: 3, 4
+        | 6. \\VzGz          U.D. 3-5
         """,
         # Theorem generic (no theorem number)
         """
