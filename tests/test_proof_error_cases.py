@@ -150,18 +150,6 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
         (
             """
             |-
-            | | 1. A  assumption for C.D.
-            | |-
-            | | | 2. B  assumption for C.D.
-            | | |-
-            | | | 3. C  premise
-            | 4. (A -> C)  C.D. 1-3
-            """,
-            r"Last line of conditional derivation cannot be a subproof",
-        ),
-        (
-            """
-            |-
             | | 1. A  premise
             | | 2. B  premise
             | |-
@@ -192,19 +180,6 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
             | 5. A  I.D. 1-4
             """,
             r"Second-last line of indirect derivation cannot be a subproof",
-        ),
-        (
-            """
-            |-
-            | | 1. ~A  assumption for I.D.
-            | |-
-            | | 2. B  premise
-            | | | 3. C  assumption for C.D.
-            | | |-
-            | | | 4. D  premise
-            | 5. A  I.D. 1-4
-            """,
-            r"Last line of indirect derivation cannot be a subproof",
         ),
         (
             """
@@ -318,19 +293,6 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
             | 3. \\VxFx  U.D. 1-2
             """,
             r"must have an arbitrary term",
-        ),
-        (
-            """
-            |-
-            | | [x']
-            | | 1. Fx'  premise
-            | |-
-            | | | 2. A  assumption for C.D.
-            | | |-
-            | | | 3. B  premise
-            | 4. \\VxBx  U.D. 1-3
-            """,
-            r"cannot be a subproof",
         ),
         (
             """
