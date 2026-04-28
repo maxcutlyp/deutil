@@ -1,16 +1,11 @@
+import pytest
 import textwrap
 
 from deutil.proof import Proof
 
-
-def run_markdown_check(markdown: str) -> None:
-    lines = textwrap.dedent(markdown).strip().splitlines()
-    proof = Proof.from_markdown(lines)
-    proof.check()
-
-
-def test_all_rule_success_cases() -> None:
-    cases = [
+@pytest.mark.parametrize(
+    "markdown",
+    [
         # Premise + Modus Ponens
         """
         | 1. (A -> B)  premise
@@ -214,6 +209,8 @@ def test_all_rule_success_cases() -> None:
         | 1. ((A -> B) -> (~B -> ~A))  theorem: T10
         """,
     ]
-
-    for case in cases:
-        run_markdown_check(case)
+)
+def test_all_rule_success_cases(markdown: str) -> None:
+    lines = textwrap.dedent(markdown).strip().splitlines()
+    proof = Proof.from_markdown(lines)
+    proof.check()
