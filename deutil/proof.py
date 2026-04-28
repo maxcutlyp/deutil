@@ -307,9 +307,9 @@ class Proof:
                     end_proof, end_line = get_line_or_die(rule.end)
                     if start_proof is not end_proof:
                         raise ProofError(f'Lines {rule.start} and {rule.end} are not in the same subproof (referenced on line {line.num}: {line.justification})')
-                    if rule.start != start_line.num:
+                    if rule.start != start_proof.start:
                         raise ProofError(f'Line {rule.start} is not the start of a subproof (referenced on line {line.num}: {line.justification})')
-                    if rule.end != end_line.num:
+                    if rule.end != end_proof.end:
                         raise ProofError(f'Line {rule.end} is not the end of a subproof (referenced on line {line.num}: {line.justification})')
 
                     try:
