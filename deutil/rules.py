@@ -181,7 +181,11 @@ class RegexRule(SimpleRule):
             *('    ' + name for name in cls.NAMES),
         ])
 
-class Premise(SimpleRule, Final):
+class PremiseRule:
+    ''' marker class for rules that can be used as premises '''
+    pass
+
+class Premise(SimpleRule, Final, PremiseRule):
     RULES = ()
 
     @classmethod
@@ -201,7 +205,7 @@ class Premise(SimpleRule, Final):
             '    prem.',
         ])
 
-class Assumption(SimpleRule, ABC):
+class Assumption(SimpleRule, PremiseRule, ABC):
     RULES = ()
 
     for_short: str
