@@ -120,20 +120,23 @@ from deutil.proof import Proof
         """,
         # Conditional Derivation + AssumptionForCD
         """
+        | 1. B  premise
         |-
-        | | 1. A  assumption for C.D.
+        | | 2. A  assumption for C.D.
         | |-
-        | | 2. B  premise
-        | 3. (A -> B)  C.D. 1-2
+        | | 3. B  repeat: 1
+        | 4. (A -> B)  C.D. 2-3
         """,
         # Indirect Derivation + AssumptionForID
         """
+        | 1. B  premise
+        | 2. ~B  premise
         |-
-        | | 1. ~A  assumption for I.D.
+        | | 3. ~A  assumption for I.D.
         | |-
-        | | 2. B  premise
-        | | 3. ~B  premise
-        | 4. A  I.D. 1-3
+        | | 4. B  repeat: 1
+        | | 5. ~B  repeat: 2
+        | 6. A  I.D. 3-5
         """,
         # Universal Instantiation
         """

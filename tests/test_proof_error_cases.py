@@ -34,7 +34,8 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
         ),
         (
             """
-            | 1. Fx'  premise
+            |-
+            | 1. Fx'  theorem
             """,
             r"arbitrary terms are not in scope",
         ),
@@ -49,9 +50,9 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
         (
             """
             |-
-            | | 1. A  premise
+            | | 1. A  assumption for C.D.
             | |-
-            | | 2. B  premise
+            | | 2. A  repeat: 1
             | 3. B  repeat: 1
             """,
             r"Line 1 is not accessible",
@@ -61,12 +62,12 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
             |-
             | | 1. A  assumption for C.D.
             | |-
-            | | 2. B  premise
-            | 3. A  premise
+            | | 2. A  repeat: 1
+            | 3. (A -> A)  C.D. 1-2
             | | 4. C  assumption for C.D.
             | |-
-            | | 5. C  premise
-            | 6. (A -> B)  C.D. 1-5
+            | | 5. C  repeat: 4
+            | 6. (A -> A)  C.D. 1-5
             """,
             r"not in the same subproof",
         ),
@@ -75,9 +76,9 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
             |-
             | | 1. A  assumption for C.D.
             | |-
-            | | 2. B  premise
-            | | 3. C  premise
-            | 4. (A -> B)  C.D. 2-3
+            | | 2. A  repeat: 1
+            | | 3. A  repeat: 1
+            | 4. (A -> A)  C.D. 2-3
             """,
             r"not the start of a subproof",
         ),
@@ -86,9 +87,9 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
             |-
             | | 1. A  assumption for C.D.
             | |-
-            | | 2. B  premise
-            | | 3. C  premise
-            | 4. (A -> B)  C.D. 1-2
+            | | 2. A  repeat: 1
+            | | 3. A  repeat: 1
+            | 4. (A -> A)  C.D. 1-2
             """,
             r"not the end of a subproof",
         ),
@@ -119,52 +120,56 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
         ),
         (
             """
+            | 1. B  premise
             |-
-            | | 1. A  assumption for C.D.
+            | | 2. A  assumption for C.D.
             | |-
-            | | 2. B  premise
-            | 3. A  C.D. 1-2
+            | | 3. B  repeat: 1
+            | 4. A  C.D. 2-3
             """,
             r"Conclusion of conditional derivation must be an implication",
         ),
         (
             """
+            | 1. B  premise
             |-
-            | | 1. A  assumption for C.D.
+            | | 2. A  assumption for C.D.
             | |-
-            | | 2. B  premise
-            | 3. (C -> B)  C.D. 1-2
+            | | 3. B  repeat: 1
+            | 4. (C -> B)  C.D. 2-3
             """,
             r"First premise of conditional derivation must match antecedent",
         ),
         (
             """
+            | 1. B  premise
             |-
-            | | 1. A  assumption for C.D.
+            | | 2. A  assumption for C.D.
             | |-
-            | | 2. B  premise
-            | 3. (A -> C)  C.D. 1-2
+            | | 3. B  repeat: 1
+            | 4. (A -> C)  C.D. 2-3
             """,
             r"Last premise of conditional derivation must match consequent",
         ),
         (
             """
             |-
-            | | 1. A  premise
-            | | 2. B  premise
+            | | [x']
             | |-
-            | | 3. ~B  premise
-            | 4. C  I.D. 1-3
+            | | 1. (A v ~A)  theorem
+            | | 2. (A v ~A)  theorem
+            | 3. C  I.D. 1-2
             """,
             r"Indirect derivation must have exactly one assumption",
         ),
         (
             """
+            | 1. B  premise
             |-
-            | | 1. ~A  assumption for I.D.
+            | | 2. ~A  assumption for I.D.
             | |-
-            | | 2. B  premise
-            | 3. A  I.D. 1-2
+            | | 3. B  repeat: 1
+            | 4. A  I.D. 2-3
             """,
             r"Indirect derivation must have at least 2 statements",
         ),
@@ -175,53 +180,61 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
             | |-
             | | | 2. B  assumption for C.D.
             | | |-
-            | | | 3. C  premise
-            | | 4. ~B  premise
+            | | | 3. B  repeat: 2
+            | | 4. (A v ~A)  theorem
             | 5. A  I.D. 1-4
             """,
             r"Second-last line of indirect derivation cannot be a subproof",
         ),
         (
             """
+            | 1. B  premise
+            | 2. C  premise
             |-
-            | | 1. ~A  assumption for I.D.
+            | | 3. ~A  assumption for I.D.
             | |-
-            | | 2. B  premise
-            | | 3. C  premise
-            | 4. A  I.D. 1-3
+            | | 4. B  repeat: 1
+            | | 5. C  repeat: 2
+            | 6. A  I.D. 3-5
             """,
             r"Last premise of indirect derivation must be a negation",
         ),
         (
             """
+            | 1. B  premise
+            | 2. ~C  premise
             |-
-            | | 1. ~A  assumption for I.D.
+            | | 3. ~A  assumption for I.D.
             | |-
-            | | 2. B  premise
-            | | 3. ~C  premise
-            | 4. A  I.D. 1-3
+            | | 4. B  repeat: 1
+            | | 5. ~C  repeat: 2
+            | 6. A  I.D. 3-5
             """,
             r"must be the negation of the second-last premise",
         ),
         (
             """
+            | 1. B  premise
+            | 2. ~B  premise
             |-
-            | | 1. A  assumption for C.D.
+            | | 3. A  assumption for C.D.
             | |-
-            | | 2. B  premise
-            | | 3. ~B  premise
-            | 4. C  I.D. 1-3
+            | | 4. B  repeat: 1
+            | | 5. ~B  repeat: 2
+            | 6. C  I.D. 3-5
             """,
             r"First premise of indirect derivation must be a negation",
         ),
         (
             """
+            | 1. B  premise
+            | 2. ~B  premise
             |-
-            | | 1. ~A  assumption for I.D.
+            | | 3. ~A  assumption for I.D.
             | |-
-            | | 2. B  premise
-            | | 3. ~B  premise
-            | 4. C  I.D. 1-3
+            | | 4. B  repeat: 1
+            | | 5. ~B  repeat: 2
+            | 6. C  I.D. 3-5
             """,
             r"must be the negation of the conclusion",
         ),
@@ -275,31 +288,34 @@ def assert_syntax_error(markdown: str, pattern: str) -> None:
         ),
         (
             """
+            | 1. \\VxGx  premise
             |-
-            | | 1. Fx  premise
+            | | [x']
             | |-
-            | | 2. Gx  premise
-            | 3. (Fx -> Gx)  U.D. 1-2
+            | | 2. Gx'  U.I. 1
+            | 3. Gx  U.D. 2-2
             """,
             r"Conclusion of universal derivation must be a universal quantifier",
         ),
         (
             """
+            | 1. Fx  premise
             |-
-            | | 1. A  assumption for C.D.
+            | | 2. A  assumption for C.D.
             | |-
-            | | 2. Fx  premise
-            | 3. \\VxFx  U.D. 1-2
+            | | 3. Fx  repeat: 1
+            | 4. \\VxFx  U.D. 2-3
             """,
             r"must have an arbitrary term",
         ),
         (
             """
+            | 1. \\VxGx  premise
             |-
             | | [x']
             | |-
-            | | 1. Gx'  premise
-            | 2. \\VxHx  U.D. 1-1
+            | | 2. Gx'  U.I. 1
+            | 3. \\VxHx  U.D. 2-2
             """,
             r"must match body of conclusion",
         ),
