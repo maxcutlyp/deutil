@@ -10,13 +10,19 @@ from markdown.treeprocessors import Treeprocessor
 from pathlib import Path
 from weasyprint import HTML  # type:ignore[import-untyped]
 import logging
+import argparse
 
 from .proof import Proof
 from .rules import ProofError
 
-logging.basicConfig()
+parser = argparse.ArgumentParser(description='Convert a Markdown file with DeLancy-style proofs to PDF.')
+parser.add_argument('input', help='The input Markdown file.')
+parser.add_argument('output', nargs='?', help='The output PDF file. If not provided, the output file will have the same name as the input file but with a .pdf extension.')
+parser.add_argument('--check', action=argparse.BooleanOptionalAction, default=True, help='Whether to check the proofs for correctness. Default is True.')
+parser.add_argument('--pdf', action=argparse.BooleanOptionalAction, default=True, help='Whether to write the output PDF file. Default is True.')
+parser.add_argument('--html', action=argparse.BooleanOptionalAction, default=False, help='Whether to write the intermediate HTML file. Default is False.')
 
-WRITE_HTML = True
+logging.basicConfig()
 
 CSS = '''
 table.proof {
@@ -53,6 +59,10 @@ class StylePostprocessor(Postprocessor):
         return '<style>' + CSS + '</style>' + text
 
 class ProofFormatter(Preprocessor):
+    def __init__(self, md: markdown.Markdown, check: bool):
+        super().__init__(md)
+        self.check = check
+
     '''
     Formats proofs (consecutive lines starting with '|').
 
@@ -95,10 +105,13 @@ class ProofFormatter(Preprocessor):
                 except SyntaxError as e:
                     raise SyntaxError(f'Error parsing proof starting on line {real_i + 1}: {e}')
                 logging.debug(proof)
-                try:
-                    proof.check()
-                except ProofError as e:
-                    raise ProofError(f'Error checking proof starting on line {real_i + 1}: {e}')
+
+                if self.check:
+                    try:
+                        proof.check()
+                    except ProofError as e:
+                        raise ProofError(f'Error checking proof starting on line {real_i + 1}: {e}')
+
                 html = proof.to_html()
                 lines[i] = html
                 for _ in range(len(proof_lines) - 1):
@@ -127,40 +140,49 @@ class HeadingFixerPostProcessor(Postprocessor):
         return str(soup)
 
 class ProofExtension(markdown.Extension):
+    def __init__(self, check: bool):
+        super().__init__()
+        self.check = check
+
     def extendMarkdown(self, md: markdown.Markdown) -> None:
-        md.preprocessors.register(ProofFormatter(md), 'proof_formatter', 20)
+        md.preprocessors.register(ProofFormatter(md, check=check), 'proof_formatter', 20)
         md.postprocessors.register(StylePostprocessor(md), 'style_postprocessor', 25)
         md.postprocessors.register(HeadingFixerPostProcessor(md), 'heading_fixer_postprocessor', 15)
 
-def convert(input_file: Path, output_file: Path) -> None:
+def convert(
+    input_file: Path,
+    output_file: Path,
+    check: bool,
+    write_pdf: bool,
+    write_html: bool,
+) -> None:
     with input_file.open() as f:
         md_content = f.read()
 
     try:
-        html_content = markdown.markdown(md_content, extensions=[ProofExtension()])
+        html_content = markdown.markdown(md_content, extensions=[ProofExtension(check=check)])
     except (SyntaxError, ProofError) as e:
         logging.error(e)
         sys.exit(1)
 
-    if WRITE_HTML:
+    if write_html:
         output_file.with_suffix('.html').write_text(html_content)
-    HTML(string=html_content).write_pdf(output_file)
 
-def usage() -> None:
-    print(f'Usage: {sys.argv[0]} <input.md> <output.pdf>')
+    if write_pdf:
+        HTML(string=html_content).write_pdf(output_file)
 
 def main() -> int:
-    if len(sys.argv) > 3 or len(sys.argv) < 2:
-        usage()
-        return 1
+    args = parser.parse_args()
+    input_file = Path(args.input)
+    output_file = Path(args.output) if args.output else input_file.with_suffix('.pdf')
 
-    input_file = Path(sys.argv[1])
-    if len(sys.argv) > 2:
-        output_file = Path(sys.argv[2])
-    else:
-        output_file = input_file.with_suffix('.pdf')
-
-    convert(input_file, output_file)
+    convert(
+        input_file,
+        output_file,
+        check=args.check,
+        write_pdf=args.pdf,
+        write_html=args.html,
+    )
     return 0
 
 if __name__ == "__main__":
