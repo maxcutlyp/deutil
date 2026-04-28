@@ -23,8 +23,9 @@ parser.add_argument('--help-rules', action='store_true', help='Show the rules th
 parser.add_argument('--check', action=argparse.BooleanOptionalAction, default=True, help='Whether to check the proofs for correctness. Default is True.')
 parser.add_argument('--pdf', action=argparse.BooleanOptionalAction, default=True, help='Whether to write the output PDF file. Default is True.')
 parser.add_argument('--html', action=argparse.BooleanOptionalAction, default=False, help='Whether to write the intermediate HTML file. Default is False.')
+parser.add_argument('--debug', action='store_true', help='Enable debug logging.')
 
-logging.basicConfig()
+logging.basicConfig(level=logging.DEBUG if parser.parse_args().debug else logging.INFO)
 
 CSS = '''
 table.proof {

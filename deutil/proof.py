@@ -89,10 +89,14 @@ class Proof:
             if not line.startswith('|'):
                 continue
 
+            logging.debug(f'Parsing line {i}: {line} ({level=})')
             if m := re.match(rf'^{r'\|\s*' * level}', line):
                 trimmed = line[m.end():]
+                logging.debug(f'Trimmed line: {trimmed}')
                 if trimmed.startswith('|'):
+                    logging.debug(f'Start of subproof detected on line {i}, parsing subproof...')
                     subproof, skip = cls._from_markdown(rawlines[i-1:], level + 1)
+                    logging.debug(f'Finished parsing subproof starting on line {i}, skipping {skip} lines')
                     i += skip - 2
                     lines.append(subproof)
                     continue
@@ -131,6 +135,9 @@ class Proof:
                 continue
 
             raise SyntaxError(f'Invalid proof line on line {i+1}: {line}')
+        else:
+            if level > 1:
+                raise SyntaxError(f'Final line of proof cannot be a subproof')
 
         inst = cls(
             prems,
