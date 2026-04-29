@@ -1,22 +1,27 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from frozendict import frozendict
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, ABCMeta
 from enum import Enum
 import inspect
 import logging
 import typing as t
 
-FOL_IN_TRUTHTABLE_ERROR = SyntaxError("Cannot use FOL expressions in truth tables")
+type PLInterpretation = t.Mapping[Atom, bool]
+type FOLInterpretation = t.Mapping[Atom | Predicate, bool]
+type Interpretation = PLInterpretation | FOLInterpretation
 
 class _Expr(ABC):
     __match_args__: tuple[str, ...]
 
     @abstractmethod
-    def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
+    def evaluate(self, interpretation: Interpretation) -> bool:
         raise NotImplementedError
     @abstractmethod
     def render(self) -> str:
+        raise NotImplementedError
+    @abstractmethod
+    def extract[T](self, typ: type[T]) -> set[T]:
         raise NotImplementedError
     def __str__(self) -> str:
         return self.render()
@@ -31,8 +36,12 @@ class _Expr(ABC):
 class Atom(_Expr):
     def __init__(self, name: str):
         self.name = name
-    def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        return assignments[self]
+    def evaluate(self, interpretation: Interpretation) -> bool:
+        return interpretation[self]
+    def extract[T](self, typ: type[T]) -> set[T]:
+        if isinstance(self, typ):
+            return {self}
+        return set()
     def __hash__(self) -> int:
         return hash(self.name)
     def __eq__(self, other: object) -> bool:
@@ -44,11 +53,21 @@ class Atom(_Expr):
     def __repr__(self) -> str:
         return f"Atom({self.name!r})"
 
-class SymbolicTerm(_Expr):
+class ArbitraryTermMeta(ABCMeta):
+    def __instancecheck__(cls, instance: object) -> bool:
+        if SymbolicTerm in instance.__class__.mro():
+            return t.cast(SymbolicTerm, instance).is_arbitrary
+        return False
+
+class SymbolicTerm(_Expr, metaclass=ArbitraryTermMeta):
     def __init__(self, name: str):
-        self.name = name
-    def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        raise FOL_IN_TRUTHTABLE_ERROR
+        self.name = name.replace("'", "’")  # normalize to use prime symbol for arbitrary terms
+    def evaluate(self, interpretation: Interpretation) -> bool:
+        raise SyntaxError('Symbolic terms cannot be evaluated.')
+    def extract[T](self, typ: type[T]) -> set[T]:
+        if isinstance(self, typ):
+            return {self}
+        return set()
     def __hash__(self) -> int:
         return hash(self.name)
     def __eq__(self, other: object) -> bool:
@@ -64,19 +83,34 @@ class SymbolicTerm(_Expr):
     def is_arbitrary(self) -> bool:
         return self.name.endswith('’')
 
-class Variable(SymbolicTerm):
-    pass
 class ArbitraryTerm(SymbolicTerm):
-    pass
-class Argument(SymbolicTerm):
-    pass
+    def __init__(self, name: str):
+        super().__init__(name)
+        if not super().is_arbitrary:
+            raise ValueError(f"ArbitraryTerm name must end with a prime symbol, got: {name}")
+
+    @property
+    def is_arbitrary(self) -> t.Literal[True]:
+        is_arbitrary = super().is_arbitrary
+        assert is_arbitrary is True
+        return is_arbitrary
 
 class Predicate(_Expr):
-    def __init__(self, name: str, arguments: list[Argument]):
+    def __init__(self, name: str, arguments: list[SymbolicTerm]):
         self.name = name
         self.arguments = arguments
-    def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        raise FOL_IN_TRUTHTABLE_ERROR
+    def evaluate(self, interpretation: Interpretation) -> bool:
+        try:
+            return t.cast(FOLInterpretation, interpretation)[self]
+        except KeyError:
+            raise SyntaxError("Cannot use predicates in truth tables")
+    def extract[T](self, typ: type[T]) -> set[T]:
+        result = set[T]()
+        if isinstance(self, typ):
+            result.add(self)
+        for arg in self.arguments:
+            result |= arg.extract(typ)
+        return result
     def __hash__(self) -> int:
         return hash((self.name, tuple(self.arguments)))
     def __eq__(self, other: object) -> bool:
@@ -87,10 +121,45 @@ class Predicate(_Expr):
         args_str = ''.join(arg.render() for arg in self.arguments)
         return f"{self.name}{args_str}" if args_str else self.name
 
+class UnboundPredicate(_Expr):
+    def __init__(self, name: str, arity: int):
+        self.name = name
+        self.arity = arity
+    def evaluate(self, interpretation: Interpretation) -> bool:
+        raise SyntaxError('Unbound predicates cannot be evaluated.')
+    def extract[T](self, typ: type[T]) -> set[T]:
+        if isinstance(self, typ):
+            return {self}
+        return set()
+    def __hash__(self) -> int:
+        return hash((self.name, self.arity))
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, UnboundPredicate):
+            return NotImplemented
+        return self.name == other.name and self.arity == other.arity
+    def render(self) -> str:
+        return f"{self.name}/{self.arity}"
+
+    @classmethod
+    def from_predicate(cls, predicate: Predicate) -> UnboundPredicate:
+        return cls(predicate.name, len(predicate.arguments))
+
+    def bind(self, arguments: t.Sequence[SymbolicTerm]) -> Predicate:
+        if len(arguments) != self.arity:
+            raise ValueError(f"Expected {self.arity} arguments to bind predicate {self.name}, got {len(arguments)}")
+        return Predicate(self.name, list(arguments))
+
 class Quantifier(_Expr):
-    def __init__(self, variable: Variable, body: Expr):
+    def __init__(self, variable: SymbolicTerm, body: Expr):
         self.variable = variable
         self.body = body
+    def extract[T](self, typ: type[T]) -> set[T]:
+        result = set[T]()
+        if isinstance(self, typ):
+            result.add(self)
+        result |= self.variable.extract(typ)
+        result |= self.body.extract(typ)
+        return result
     def __eq__(self, other: object) -> bool:
         if type(self) != type(other):
             return NotImplemented
@@ -100,14 +169,20 @@ class Quantifier(_Expr):
         return hash((type(self), self.variable, self.body))
 
 class UniversalQuantifier(Quantifier):
-    def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        raise FOL_IN_TRUTHTABLE_ERROR
+    def evaluate(self, interpretation: Interpretation) -> bool:
+        return all(
+            replace_symbolic_term(self.body, self.variable, term).evaluate(interpretation)
+            for term in domain(interpretation)
+        )
     def render(self) -> str:
         return f"{StaticToken.UNIVERSAL.value}{self.variable.render()}{self.body.render()}"
 
 class ExistentialQuantifier(Quantifier):
-    def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        raise FOL_IN_TRUTHTABLE_ERROR
+    def evaluate(self, interpretation: Interpretation) -> bool:
+        return any(
+            replace_symbolic_term(self.body, self.variable, term).evaluate(interpretation)
+            for term in domain(interpretation)
+        )
     def render(self) -> str:
         return f"{StaticToken.EXISTENTIAL.value}{self.variable.render()}{self.body.render()}"
 
@@ -125,10 +200,18 @@ class BinaryOperator(_Expr):
     def __hash__(self) -> int:
         return hash((type(self), self.left, self.right))
 
-    def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        left_value = self.left.evaluate(assignments)
-        right_value = self.right.evaluate(assignments)
+    def evaluate(self, interpretation: Interpretation) -> bool:
+        left_value = self.left.evaluate(interpretation)
+        right_value = self.right.evaluate(interpretation)
         return self._evaluate(left_value, right_value)
+
+    def extract[T](self, typ: type[T]) -> set[T]:
+        result = set[T]()
+        if isinstance(self, typ):
+            result.add(self)
+        result |= self.left.extract(typ)
+        result |= self.right.extract(typ)
+        return result
 
     @abstractmethod
     def _evaluate(self, left_value: bool, right_value: bool) -> bool:
@@ -147,20 +230,33 @@ class UnaryOperator(_Expr):
     def __hash__(self) -> int:
         return hash((type(self), self.operand))
 
-    def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        operand_value = self.operand.evaluate(assignments)
+    def evaluate(self, interpretation: Interpretation) -> bool:
+        operand_value = self.operand.evaluate(interpretation)
         return self._evaluate(operand_value)
+
+    def extract[T](self, typ: type[T]) -> set[T]:
+        result = set[T]()
+        if isinstance(self, typ):
+            result.add(self)
+        result |= self.operand.extract(typ)
+        return result
 
     @abstractmethod
     def _evaluate(self, operand_value: bool) -> bool:
         raise NotImplementedError
 
 class MetaFunction(_Expr):
-    def __init__(self, name: str, argument: Variable):
+    def __init__(self, name: str, argument: SymbolicTerm):
         self.name = name
         self.argument = argument
-    def evaluate(self, assignments: t.Mapping[Atom, bool]) -> bool:
-        raise FOL_IN_TRUTHTABLE_ERROR
+    def evaluate(self, interpretation: Interpretation) -> bool:
+        raise SyntaxError('MetaFunctions cannot be evaluated.')
+    def extract[T](self, typ: type[T]) -> set[T]:
+        result = set[T]()
+        if isinstance(self, typ):
+            result.add(self)
+        result |= self.argument.extract(typ)
+        return result
     def __hash__(self) -> int:
         return hash((self.name, self.argument))
     def __eq__(self, other: object) -> bool:
@@ -203,46 +299,22 @@ class Not(UnaryOperator):
         return f"{StaticToken.NOT.value}{self.operand.render()}"
 
 def extract_atoms(expr: Expr) -> set[Atom]:
-    if isinstance(expr, Atom):
-        return {expr}
-    elif isinstance(expr, Predicate):
-        return set()
-    elif isinstance(expr, Quantifier):
-        return extract_atoms(expr.body)
-    elif isinstance(expr, BinaryOperator):
-        return extract_atoms(expr.left) | extract_atoms(expr.right)
-    elif isinstance(expr, UnaryOperator):
-        return extract_atoms(expr.operand)
-    elif isinstance(expr, MetaFunction):
-        return set()
+    ''' deprecated - use expr.extract(Atom) instead '''
+    return expr.extract(Atom)
 
 def extract_metafuncs(expr: Expr) -> set[MetaFunction]:
-    if isinstance(expr, Atom):
-        return set()
-    elif isinstance(expr, Predicate):
-        return set()
-    elif isinstance(expr, Quantifier):
-        return extract_metafuncs(expr.body)
-    elif isinstance(expr, BinaryOperator):
-        return extract_metafuncs(expr.left) | extract_metafuncs(expr.right)
-    elif isinstance(expr, UnaryOperator):
-        return extract_metafuncs(expr.operand)
-    elif isinstance(expr, MetaFunction):
-        return {expr}
+    ''' deprecated - use expr.extract(MetaFunction) instead '''
+    return expr.extract(MetaFunction)
 
 def extract_symbolic_terms(expr: Expr) -> set[SymbolicTerm]:
-    if isinstance(expr, Atom):
-        return set()
-    elif isinstance(expr, Predicate):
-        return set(expr.arguments)
-    elif isinstance(expr, Quantifier):
-        return {expr.variable} | extract_symbolic_terms(expr.body)
-    elif isinstance(expr, BinaryOperator):
-        return extract_symbolic_terms(expr.left) | extract_symbolic_terms(expr.right)
-    elif isinstance(expr, UnaryOperator):
-        return extract_symbolic_terms(expr.operand)
-    elif isinstance(expr, MetaFunction):
-        return {expr.argument}
+    ''' deprecated - use expr.extract(SymbolicTerm) instead '''
+    return expr.extract(SymbolicTerm)
+
+def domain(interpretation: Interpretation) -> set[SymbolicTerm]:
+    terms = set[SymbolicTerm]()
+    for key in interpretation.keys():
+        terms |= key.extract(SymbolicTerm)
+    return terms
 
 @t.overload
 def replace_symbolic_term[TOld: SymbolicTerm, TNew: SymbolicTerm](expr: TOld, old: TOld, new: TNew) -> TNew: ...
@@ -261,10 +333,6 @@ def replace_symbolic_term[T: _Expr](expr: T, old: SymbolicTerm, new: SymbolicTer
     if isinstance(expr, t.Iterable) and not isinstance(expr, str):
         return type(expr)(replace_symbolic_term(elem, old, new) for elem in expr)
     return expr
-
-type TTRowAssignment = frozendict[Atom, bool]
-type TTRowResult = t.OrderedDict[Expr, bool]
-type TruthTable = t.Mapping[TTRowAssignment, TTRowResult]
 
 class StaticToken(Enum):
     LPAREN = '('
@@ -415,11 +483,11 @@ class ExpressionParser:
 
         if isinstance(peek, SymbolicTermToken):
             # Predicate with arguments
-            arguments = list[Argument]()
+            arguments = list[SymbolicTerm]()
             while isinstance((peek := self.tokens.peek_token_or_none()), SymbolicTermToken):
                 symbolic_term = self.tokens.next_token()
                 assert isinstance(symbolic_term, SymbolicTermToken), f'mismatch between peeked token and next token: {peek} vs {symbolic_term}'
-                arguments.append(Argument(symbolic_term.value))
+                arguments.append(SymbolicTerm(symbolic_term.value))
             return Predicate(token.value, arguments)
 
         if peek == StaticToken.LPAREN:
@@ -430,7 +498,7 @@ class ExpressionParser:
                 raise SyntaxError(f"Expected variable after metafunction name, got: {variable} at position {self.tokens.pos}")
             if self.tokens.next_token() != StaticToken.RPAREN:
                 raise SyntaxError(f"Expected ')' after metafunction variable, got: {self.tokens.peek_token()} at position {self.tokens.pos}")
-            return MetaFunction(token.value, Variable(variable.value))
+            return MetaFunction(token.value, SymbolicTerm(variable.value))
 
         return Atom(token.value)
 
@@ -440,7 +508,7 @@ class ExpressionParser:
         logging.debug(f"Parsed variable: {token}")
         if not isinstance(token, SymbolicTermToken):
             raise SyntaxError(f"Expected variable after quantifier, got: {token} at position {self.tokens.pos}")
-        variable = Variable(token.value)
+        variable = SymbolicTerm(token.value)
         body = self._parse()
         if quantifier == StaticToken.UNIVERSAL:
             return UniversalQuantifier(variable, body)
@@ -489,13 +557,13 @@ def new_metafunc_name(*exprs: Expr) -> str:
             return name
         i += 1
 
-def new_variable(*exprs: Expr) -> Variable:
+def new_variable(*exprs: Expr) -> SymbolicTerm:
     existing_names = set(term for expr in exprs for term in extract_symbolic_terms(expr))
     i = 1
     while True:
         name = f'__var{i}__'
         if name not in existing_names:
-            return Variable(name)
+            return SymbolicTerm(name)
         i += 1
 
 DO_UNIFY_DEBUG = False
