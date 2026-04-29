@@ -16,11 +16,6 @@ import os
 
 from .expr import (
     Atom,
-    And,
-    Or,
-    Imp,
-    Bij,
-    Not,
     Expr,
     extract_atoms,
     ExpressionParser,
