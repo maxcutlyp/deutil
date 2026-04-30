@@ -48,6 +48,7 @@ def test_interpretations_small() -> None:
     assert len(intps) == len(expect)
     assert set(frozendict(intp) for intp in intps) == set(frozendict(e) for e in expect)
 
+@pytest.mark.slow
 def test_interpretations_medium() -> None:
     preds = [
         UnboundPredicate('F', 3),
@@ -61,6 +62,7 @@ def test_interpretations_medium() -> None:
 
     check_interpretations(preds, domain)
 
+@pytest.mark.slow
 def test_interpretations_large() -> None:
     preds = [
         UnboundPredicate('F', 1),
@@ -79,7 +81,7 @@ def test_interpretations_large() -> None:
 def test_interpretations_many_small() -> None:
     check_interpretations_many(max_preds=2, max_domain_sz=2, max_arity=2)
 
-@pytest.mark.slow
+@pytest.mark.veryslow
 def test_interpretations_many_large() -> None:
     check_interpretations_many(max_preds=4, max_domain_sz=4, max_arity=4)
 

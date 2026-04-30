@@ -25,5 +25,6 @@ test = [
 [tool.pytest]
 markers = [
     "slow: marks tests as slow (deselected by default; use '--run-slow' to include)",
+    "veryslow: marks tests as very slow (deselected by default; use '--run-very-slow' to include)",
 ]
 
