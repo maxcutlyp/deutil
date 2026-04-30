@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deutil"
+version = "0.0.1"
+dependencies = [
+    "weasyprint",
+    "markdown",
+    "types-Markdown",
+    "beautifulsoup4",
+    "frozendict",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "mypy",
+]
+
+[tool.pytest]
+markers = [
+    "slow: marks tests as slow (deselected by default; use '--run-slow' to include)",
+]
+

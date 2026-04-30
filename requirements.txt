@@ -1,7 +1,0 @@
-weasyprint
-markdown
-types-Markdown
-beautifulsoup4
-frozendict
-mypy
-pytest
