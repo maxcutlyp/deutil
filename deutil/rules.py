@@ -57,7 +57,7 @@ class SubproofRule(ABC):
     @classmethod
     def match(cls, justification: str) -> t.Self | None:
         names_pattern = '|'.join(re.escape(name.lower()) for name in cls.NAMES)
-        pattern = re.compile(rf'^(?:{names_pattern})\.?:?\s*(\d+)-(\d+)$')
+        pattern = re.compile(rf'^(?:{names_pattern})\.?:?,?\s*(\d+)-(\d+)$')
         if m := pattern.match(justification):
             try:
                 start, end = int(m.group(1)), int(m.group(2))
@@ -154,7 +154,7 @@ class RegexRule(SimpleRule):
     def match(cls, justification: str) -> t.Self | None:
         names_pattern = '|'.join(re.escape(name.lower()) for name in cls.NAMES)
         lines_pattern = '|'.join(r',\s*'.join(r'\d+' for _ in prems) for prems,_conc in cls.RULES)
-        pattern = re.compile(rf'^(?:{names_pattern})\.?:?\s*({lines_pattern})$')
+        pattern = re.compile(rf'^(?:{names_pattern})\.?:?,?\s*({lines_pattern})$')
         if m := pattern.match(justification):
             try:
                 nums = m.group(1)
