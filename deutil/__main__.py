@@ -5,8 +5,8 @@ import logging
 import argparse
 
 from .rules import print_rules_help
-from .truthtables import truth_tables_repl
 from .convert import convert
+from .countermodel import repl as cm_repl
 
 
 # Source - https://stackoverflow.com/a/48051233
@@ -75,7 +75,7 @@ def main_convert(args: argparse.Namespace) -> int:
 convert_parser.set_defaults(func=main_convert)
 
 def main_countermodel(args: argparse.Namespace) -> int:
-    return truth_tables_repl()
+    return cm_repl()
 countermodel_parser.set_defaults(func=main_countermodel)
 
 def main() -> int:

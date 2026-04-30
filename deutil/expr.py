@@ -604,3 +604,6 @@ def unify(expr1: Expr, expr2: Expr, bindings: dict[Atom, Expr] | None = None) ->
 
     else:
         raise ValueError(f'Unknown expression type: {type(expr1)}')
+
+def is_fol(expr: Expr) -> bool:
+    return bool(expr.extract(UniversalQuantifier) | expr.extract(ExistentialQuantifier) | expr.extract(Predicate) | expr.extract(SymbolicTerm))

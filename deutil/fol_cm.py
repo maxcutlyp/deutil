@@ -26,6 +26,10 @@ from .expr import (
     UnboundPredicate,
 )
 
+from .termutils import (
+    underline,
+)
+
 def total_interpretations(preds: t.Iterable[UnboundPredicate], domain: t.Collection[SymbolicTerm]) -> int:
     pred_arities = dict[int, set[UnboundPredicate]]()
     for pred in preds:
@@ -148,4 +152,17 @@ def find_counter_model(prems: list[Expr], conc: Expr, show_progress: bool = True
         return wrap_progress_func(_impl, total=total)
     else:
         return _impl(lambda: None)
+
+def find_cm(prems: list[Expr], conc: Expr) -> None:
+    print('Searching for a countermodel...')
+
+    intp = find_counter_model(prems, conc)
+    if intp is None:
+        print('No countermodel found. This does not necessarily mean that one does not exist.')
+        return
+
+    print('Countermodel found:')
+    for pred, value in intp.items():
+        print(f'  {pred}: {value}')
+    print()
 

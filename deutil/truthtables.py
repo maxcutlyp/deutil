@@ -21,6 +21,12 @@ from .expr import (
     ExpressionParser,
 )
 
+from .termutils import (
+    screenlen,
+    underline,
+    red as red_text,
+)
+
 type TTRowAssignment = frozendict[Atom, bool]
 type TTRowResult = t.OrderedDict[Expr, bool]
 type TruthTable = t.Mapping[TTRowAssignment, TTRowResult]
@@ -43,14 +49,10 @@ def is_counterexample(result: TTRowResult) -> bool:
     return all(prems) and not conc
 
 def render_truth_table(truth_table: TruthTable) -> str:
-    esc_seq_regex = re.compile('\x1b' + r'\[(\d+(;\d+)*)?[a-zA-Z]')
-    def screenlen(x: str) -> int:
-        return len(re.sub(esc_seq_regex, '', x))
-
     def s(value: bool, red: bool = False) -> str:
         val = 'T' if value else 'F'
         if red:
-            return f'\033[31m{val}\033[39m'
+            return red_text(val)
         return val
 
     def centered(x: str, width: int) -> str:
@@ -59,20 +61,15 @@ def render_truth_table(truth_table: TruthTable) -> str:
         right_pad = padding - left_pad
         return ' ' * left_pad + x + ' ' * right_pad
 
-    UNDERLINE_START = '\033[4m'
-    UNDERLINE_END = '\033[24m'
-
     atoms = sorted(next(iter(truth_table.keys())).keys(), key=lambda atom: atom.name)
     exprs = next(iter(truth_table.values())).keys()
-    header = ''.join([
-        UNDERLINE_START,
+    header = underline(''.join([
         ' ',
         ' | '.join(atom.name for atom in atoms),
         ' | ',
         ' | '.join(expr.render() for expr in exprs),
         ' |',
-        UNDERLINE_END,
-    ])
+    ]))
 
     lines = [header]
     for assignment, results in sorted(
@@ -92,60 +89,13 @@ def render_truth_table(truth_table: TruthTable) -> str:
 
     return '\n'.join(lines).replace('|', '│')
 
-def loop() -> None:
-    expr_strs = input("> ").split(',')
-    exprs = list[Expr]()
-    for expr_str in expr_strs:
-        parser = ExpressionParser(expr_str, raise_on_extra_tokens=True)
-        try:
-            exprs.append(parser.parse())
-        except SyntaxError as e:
-            print("Syntax error:", e)
-            return
-
+def find_cm(prems: list[Expr], conc: Expr) -> None:
     try:
-        truth_table = make_truth_table(*exprs)
+        truth_table = make_truth_table(*prems, conc)
     except SyntaxError as e:
         print("Syntax error:", e)
         return
 
     rendered = render_truth_table(truth_table)
     print(rendered)
-
-def get_history_file() -> Path:
-    app_name = 'deutil'
-    if os.name == 'nt':
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    else:
-        base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
-    return base / app_name / "history"
-
-def load_history() -> None:
-    history_file = get_history_file()
-    try:
-        readline.read_history_file(history_file)
-    except FileNotFoundError:
-        history_file.parent.mkdir(parents=True, exist_ok=True)
-        history_file.touch(exist_ok=True)
-    atexit.register(readline.write_history_file, history_file)
-
-def truth_tables_repl() -> int:
-    try:
-        readline.read_init_file()
-    except FileNotFoundError:
-        pass
-
-    load_history()
-
-    print('Entered truth table repl. Press Ctrl+D to exit.')
-
-    try:
-        while True:
-            try:
-                loop()
-            except KeyboardInterrupt:
-                print()
-    except EOFError:
-        print()
-    return 0
 
