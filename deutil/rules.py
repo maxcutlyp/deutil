@@ -168,11 +168,10 @@ class RegexRule(SimpleRule):
     def help(cls) -> str:
         rule_strs = []
         for rule_prems, rule_conc in cls.RULES:
-            rule_strs.append(
-                f"{', '.join([
-                     str(ExpressionParser(rule_prem).parse())
-                     for rule_prem in rule_prems
-                ])} ⊢ {ExpressionParser(rule_conc).parse()}")
+            for rule_prem in rule_prems:
+                rule_strs.append(f'{ExpressionParser(rule_prem).parse()}')
+            rule_strs.append(f'⊢ {ExpressionParser(rule_conc).parse()}')
+            rule_strs.append('')
         return '\n'.join([
             cls.__name__ + ':',
             '  Rules:',

@@ -34,7 +34,7 @@ def loop() -> None:
     print('Argument:')
     for i,prem in enumerate(prems):
         print(f'  {prem}')
-    print(f'⊢ {conc}')
+    print(f'  ⊢ {conc}')
     print()
 
     if any(is_fol(expr) for expr in exprs):
