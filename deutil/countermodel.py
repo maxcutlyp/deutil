@@ -12,6 +12,8 @@
 # 10. If len(new definite names) <= len(quantifiers), goto 5 (try again)
 # 11. Else, conclude no countermodel exists
 
+# Note: this is not perfect, and will not work if the countermodel requires an infinte domain.
+
 import typing as t
 import itertools
 
@@ -122,9 +124,13 @@ def find_counter_model(prems: list[Expr], conc: Expr, show_progress: bool = True
     bound_names = all_names - bound_names
     domain = { *bound_names }
 
+    if not domain:
+        # FOL assumes domains are non-empty
+        domain.add(SymbolicTerm('x0'))
+
     def _impl(progress: t.Callable[[], None]) -> FOLInterpretation | None:
         while len(domain - bound_names) <= len(quantifiers):
-            for intp in interpretations(preds, domain):
+            for intp in interpretations(preds, domain, show_progress=False):
                 if all(prem.evaluate(intp) for prem in prems) and not conc.evaluate(intp):
                     return intp
                 progress()
@@ -132,9 +138,12 @@ def find_counter_model(prems: list[Expr], conc: Expr, show_progress: bool = True
         return None
 
     if show_progress:
+        # Calculate total number of interpretations to show progress by simulating the above loop
         total = 0
-        for i in range(len(quantifiers) + 1):
-            total += total_interpretations(preds, domain | { SymbolicTerm(f'x{i}') })
+        _domain = set(domain)
+        while len(_domain - bound_names) <= len(quantifiers):
+            total += total_interpretations(preds, _domain)
+            _domain.add(SymbolicTerm(f'x{len(_domain) - len(bound_names)}'))
 
         return wrap_progress_func(_impl, total=total)
     else:

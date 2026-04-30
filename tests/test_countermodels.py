@@ -1,4 +1,4 @@
-from deutil.findcm import (
+from deutil.countermodel import (
     interpretations,
     total_interpretations,
     find_counter_model,
