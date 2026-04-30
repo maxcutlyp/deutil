@@ -13,6 +13,9 @@ dependencies = [
     "frozendict",
 ]
 
+[project.scripts]
+deutil = "deutil.__main__:main"
+
 [project.optional-dependencies]
 test = [
     "pytest",
