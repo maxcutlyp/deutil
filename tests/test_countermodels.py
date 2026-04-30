@@ -1,4 +1,4 @@
-from deutil.countermodel import (
+from deutil.fol_cm import (
     interpretations,
     total_interpretations,
     find_counter_model,
