@@ -103,7 +103,7 @@ class Predicate(_Expr):
         try:
             return t.cast(FOLInterpretation, interpretation)[self]
         except KeyError:
-            raise SyntaxError("Cannot use predicates in truth tables")
+            raise SyntaxError(f"Couldn't find predicate {self} in interpretation: {{ {', '.join(f'{k}: {v}' for k,v in interpretation.items())} }}")
     def extract[T](self, typ: type[T]) -> set[T]:
         result = set[T]()
         if isinstance(self, typ):

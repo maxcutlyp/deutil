@@ -125,6 +125,10 @@ def find_counter_model(prems: list[Expr], conc: Expr, show_progress: bool = True
     }
 
     # Assume all unbound names are constants (definite names)
+    # TODO: This does not work if a name used as a quantifier variable is also used as a constant
+    # elsewhere (e.g. in another premise). This is an error state, but it's non-trivial to detect.
+    # For now we just leave it until it causes a problem when we try to evaluate the expression
+    # containing the problematic predicate.
     bound_names = all_names - bound_names
     domain = { *bound_names }
 
