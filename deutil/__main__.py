@@ -41,7 +41,7 @@ class NoSubparsersMetavarFormatter(argparse.HelpFormatter):
 
 parser = argparse.ArgumentParser(description='Tools for working with DeLancy-style proofs.', formatter_class=NoSubparsersMetavarFormatter)
 parser.add_argument('--help-rules', action='store_true', help='Show the rules that are supported in the proofs and exit.')
-subparsers = parser.add_subparsers(title='subcommands', required=True, metavar='SUBCOMMAND')
+subparsers = parser.add_subparsers(title='subcommands', metavar='SUBCOMMAND')
 parser.add_argument('--debug', action='store_true', help='Enable debug logging.')
 
 convert_parser = subparsers.add_parser('convert', help='Convert a Markdown file with DeLancy-style proofs to PDF')
@@ -84,6 +84,10 @@ def main() -> int:
     if args.help_rules:
         print_rules_help()
         return 0
+
+    if 'func' not in args:
+        parser.print_help()
+        return 1
 
     return t.cast(t.Callable[[argparse.Namespace], int], args.func)(args)
 
