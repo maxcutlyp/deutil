@@ -20,6 +20,9 @@ authors = [
 requires-python = ">=3.12"
 license = "GPL-3.0-or-later"
 
+[project.urls]
+GitHub = "https://github.com/maxcutlyp/deutil"
+
 [project.scripts]
 deutil = "deutil.__main__:main"
 
