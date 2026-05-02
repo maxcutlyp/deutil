@@ -162,3 +162,10 @@ Countermodel found:
 This output means that in a domain containing a single element `x0`, where `Fx0` is false and `Gx0` is true, the premises will all be true but the conclusion will be false.
 
 The format `x#` is used for additional elements in the domain which were not defined names in the input. For example:
+
+## Using `deutil` as a library
+
+You may find some of the functionality of this package useful in your own code. Particularly, the `deutil.expr` module contains functions for parsing and manipulating logical expressions, and the `deutil.proof` module contains functions for parsing and checking proofs.
+
+You can add new rules to the proof checker by inheriting from `deutil.rules.InferenceRule` or `deutil.rules.SubproofRule` and implementing `cls.match()` and `self.check()`. To register the new rule, it should also inherit `deutil.rules.Final` (you may not want to do this if you are writing an abstract base class for other rules, for example). For inference rules, you may find it easier to inherit from `deutil.rules.SimpleRule` (which implements `check()` for you based on a supplied `cls.RULES`) or `deutil.rules.RegexRule` (which implements `match()` for you based on a supplied `cls.NAMES`, on top of `SimpleRule`'s `check()`). See the existing rules in `deutil/rules.py` for examples.
+
