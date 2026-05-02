@@ -12,6 +12,7 @@ dependencies = [
     "beautifulsoup4",
     "frozendict",
 ]
+readme = "README.md"
 
 [project.scripts]
 deutil = "deutil.__main__:main"
