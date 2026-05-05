@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "deutil"
-version = "0.0.1"
+version = "0.0.2"
 description = "Tools for working with DeLancy-style proofs in first-order logic and propositional logic"
 dependencies = [
     "weasyprint",
