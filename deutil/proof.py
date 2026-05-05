@@ -332,7 +332,11 @@ class Proof:
             start_proof, start_line = get_line_or_die(rule.start)
             end_proof, end_line = get_line_or_die(rule.end)
             if start_proof is not end_proof:
-                raise ProofError(f'Lines {rule.start} and {rule.end} are not in the same subproof (referenced on line {line.num}: {line.justification})')
+                # The start of a proof is ambiguous if a subproof with an arbitrary term has its first line as another subproof, so check this case
+                if start_proof.parent and start_proof.parent.arbitrary_term and start_proof.parent.arbitrary_term == end_proof.arbitrary_term:
+                    start_proof = start_proof.parent
+                else:
+                    raise ProofError(f'Lines {rule.start} and {rule.end} are not in the same subproof (referenced on line {line.num}: {line.justification})')
             if rule.start != start_proof.start:
                 raise ProofError(f'Line {rule.start} is not the start of a subproof (referenced on line {line.num}: {line.justification})')
             if rule.end != end_proof.end:
